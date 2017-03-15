@@ -1,0 +1,36 @@
+= canvas-pir
+
+This is a crude app to extract data from canvas data download.  It will generate a new csv file limited to a time range and
+if there are files stored on canvas linked to in the message column it will down load those files.
+
+This is designed to run against 'discussion_entry_dim' and 'discussion_topic_dim' files.  It does require that you manually add
+column headers to each file.
+
+discussion_entry_dim
+id	canvas_id	message	workflow_state	created_at	updated_at	deleted_at	depth
+
+discussion_topic_dim
+id	canvas_id	title	message	type	workflow_state	last_reply_at	created_at	updated_at	delayed_post_at	posted_at	deleted_at	discussion_type	pinned	locked	course_id	group_id
+
+(Note that those are and need to be tab characters between each word as separators.
+
+Once you have done the above you can run it like this
+
+bundle exec bin/canvas-pir extract -s 2016-3-3 -e 2017-3-2 -h canvas.*.* -t <TOKEN> -f discussion_entry_dim-00000-6179af10.tsv,discussion_entry_dim-00001-a4222fdb.tsv -l ./tmp
+
+NAME
+    extract - collects records in the correct date range and stores them separately
+
+SYNOPSIS
+    canvas-pir [global options] extract [command options]
+
+COMMAND OPTIONS
+    -e, --end_date=arg      - end of date range to select (default: none)
+    -f, --file_names=arg    - list of file names(comma separated) (default: none)
+    -h, --hostname=arg      - the dns name of the canvase site (default: none)
+    -l, --save_location=arg - where to save the outputed files (default: none)
+    -s, --start_date=arg    - start of date range to select (default: none)
+    -t, --token=arg         - the api token for accessing and interacting with a canvas site (default: none)
+
+:include:canvas-pir.rdoc
+

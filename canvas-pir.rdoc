@@ -1,0 +1,5 @@
+= canvas-pir
+
+Generate this with
+    canvas-pir rdoc
+After you have described your command line interface

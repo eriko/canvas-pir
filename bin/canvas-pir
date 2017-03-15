@@ -1,0 +1,144 @@
+#!/usr/bin/env ruby
+require 'gli'
+
+require 'csv'
+require 'open-uri'
+require 'csv'
+require 'net/http/post/multipart'
+require 'pry'
+require 'pandarus'
+require 'net/http'
+require 'open-uri'
+begin # XXX: Remove this begin/rescue before distributing your app
+  require 'canvas-pir'
+rescue LoadError
+  STDERR.puts "In development, you need to use `bundle exec bin/canvas-pir` to run your app"
+  STDERR.puts "At install-time, RubyGems will make sure lib, etc. are in the load path"
+  STDERR.puts "Feel free to remove this message from bin/canvas-pir now"
+  exit 64
+end
+
+module Wrapper
+  include GLI::App
+
+  extend self
+  # puts Time.now
+  include GLI::App
+
+  program_desc 'Describe your application here'
+
+  version CanvasPir::VERSION
+
+  accept Date do |value|
+    date = value.split(/-/)
+    Date.new(date[0].to_i, date[1].to_i, date[2].to_i)
+  end
+
+  subcommand_option_handling :normal
+  arguments :strict
+
+  desc 'collects records in the correct date range and stores them separately '
+  command :extract do |c|
+    c.flag [:h, :hostname] , :desc => 'the dns name of the canvase site', :type => String
+    c.flag [:t, :token], :desc => 'the api token for accessing and interacting with a canvas site', :type => String
+    c.flag [:l, :save_location], :desc => 'where to save the outputed files', :type => String
+    c.flag [:f, :file_names], :desc => 'list of file names(comma separated)', :type => Array
+    c.flag [:s, :start_date], desc: 'start of date range to select', type: Date
+    c.flag [:e, :end_date], desc: 'end of date range to select', type: Date
+
+    c.action do |global_options, options, args|
+
+
+      @client = Pandarus::Client.new(
+          prefix: "https://#{options[:h]}/api",
+          token: options[:t])
+
+      #convert TSV files to CVS files
+      #The TSV file had column headers added manually
+      options[:file_names].each do |full_filename|
+        puts full_filename
+        filename = full_filename.split('/').last
+        csv_filename = "#{options[:save_location]}/#{filename}.csv"
+        CSV.open(csv_filename, "w") do |csv|
+          File.open(full_filename) do |f|
+            f.each_line do |tsv|
+              tsv.chomp!
+              csv << tsv.split(/\t/)
+            end
+          end
+        end
+
+        #read the newly converted CSV file
+        data = CSV.read(csv_filename, {headers: true,
+                                       converters: :numeric,
+                                       header_converters: :symbol})
+        CSV.open("#{full_filename}-out.csv", "wb") do |csv|
+          csv << data.headers
+          data.each do |row|
+            #if the record was created inside the time frame both add it to the -out files and process it for file links
+            if DateTime.parse(row[:created_at])> options[:start_date] && DateTime.parse(row[:created_at]) < options[:end_date]
+              csv << row
+
+              #find any file link matches and download any files
+              matches = row[:message].scan(/https:\/\/#{options[:hostname]}\/files\/(\d*)\/download/) if row[:message]
+              matches.each do |match|
+                match.each do |m|
+                  begin
+                    file = @client.get_file(m)
+                    download(file.url, file.display_name, row[:id],options[:save_location])
+                  rescue => error
+                    puts error
+                  end
+                end if match
+              end if matches
+
+            end
+          end
+        end
+      end
+      # If you have any errors, just raise them
+      # raise "that command made no sense"
+
+      puts "extract command ran"
+
+    end
+  end
+
+  def download(url, full_filename, id, save_location)
+    begin
+      File.open("#{save_location}/#{id}--#{full_filename}", "wb") do |saved_file|
+
+        open(url, "rb") do |read_file|
+          saved_file.write(read_file.read)
+        end
+      end
+    rescue => error
+      puts error
+
+    end
+
+  end
+
+  pre do |global, command, options, args|
+    # Pre logic here
+    # Return true to proceed; false to abort and not call the
+    # chosen command
+    # Use skips_pre before a command to skip this block
+    # on that command only
+    true
+  end
+
+  post do |global, command, options, args|
+    # Post logic here
+    # Use skips_post before a command to skip this
+    # block on that command only
+  end
+
+  on_error do |exception|
+    # Error logic here
+    # return false to skip default error handling
+    true
+  end
+
+  exit run(ARGV)
+end
